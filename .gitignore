@@ -1,0 +1,4 @@
+downloads/
+firmware/*.img
+firmware/*.IMG
+*.log
