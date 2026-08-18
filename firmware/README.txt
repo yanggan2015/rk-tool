@@ -12,7 +12,8 @@
   misc.img
   oem.img
   userdata.img
-  MiniLoaderAll.bin     Maskrom 下单分区烧写需要
+  MiniLoaderAll.bin     从 update.img 抽出保存；单烧 boot/rootfs 等时使用
+                            烧整包 update.img 时用镜像内 loader，并刷新此文件
 
 用法：
   .\flash.bat                 烧写 firmware\update.img

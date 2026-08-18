@@ -3,6 +3,7 @@ firmware/*.img
 firmware/*.IMG
 firmware/*.bin
 firmware/*.BIN
+firmware/parameter.txt
 /update.img
 *.log
 downloads/

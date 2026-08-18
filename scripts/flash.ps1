@@ -31,6 +31,8 @@ $Root = Split-Path -Parent $PSScriptRoot
 $ToolDir = Join-Path $Root "tools\upgrade_tool"
 $Tool = Join-Path $ToolDir "upgrade_tool.exe"
 $FirmwareDir = Join-Path $Root "firmware"
+$SavedLoader = Join-Path $FirmwareDir "MiniLoaderAll.bin"
+$SavedParameter = Join-Path $FirmwareDir "parameter.txt"
 
 $StorageNames = @("FLASH", "EMMC", "SPINOR", "SPINAND")
 
@@ -209,22 +211,84 @@ function Find-DefaultImage {
     return $null
 }
 
+function Save-LoaderFromUpdate {
+    param([string]$UpdatePath)
+    if (-not (Test-Path -LiteralPath $UpdatePath)) { return $false }
+    $sfi = & {
+        Push-Location $ToolDir
+        try { & $Tool SFI $UpdatePath 2>&1 | Out-String }
+        finally { Pop-Location }
+    }
+    if ($sfi -notmatch "file=([^\s;]*loader[^\s;]*);.*?offset=(0x[0-9A-Fa-f]+);.*?size=(0x[0-9A-Fa-f]+)") {
+        Write-Host "update.img 中未找到 loader 条目，跳过保存。" -ForegroundColor Yellow
+        return $false
+    }
+    $offset = [Convert]::ToInt64($Matches[2].Substring(2), 16)
+    $size = [Convert]::ToInt32($Matches[3].Substring(2), 16)
+    if ($size -lt 1024 -or $size -gt 8MB) { return $false }
+    $fs = [System.IO.File]::OpenRead($UpdatePath)
+    try {
+        $null = $fs.Seek($offset, [System.IO.SeekOrigin]::Begin)
+        $buf = New-Object byte[] $size
+        $n = $fs.Read($buf, 0, $size)
+        if ($n -ne $size) { return $false }
+    } finally {
+        $fs.Close()
+    }
+    if (-not (Test-Path -LiteralPath $FirmwareDir)) {
+        New-Item -ItemType Directory -Path $FirmwareDir | Out-Null
+    }
+    [System.IO.File]::WriteAllBytes($SavedLoader, $buf)
+    Write-Host ("已从 update.img 保存 Loader: {0} ({1} 字节)" -f $SavedLoader, $size)
+
+    if ($sfi -match "file=([^\s;]*parameter[^\s;]*);.*?offset=(0x[0-9A-Fa-f]+);.*?size=(0x[0-9A-Fa-f]+)") {
+        $poff = [Convert]::ToInt64($Matches[2].Substring(2), 16)
+        $psz = [Convert]::ToInt32($Matches[3].Substring(2), 16)
+        $pfs = [System.IO.File]::OpenRead($UpdatePath)
+        try {
+            $null = $pfs.Seek($poff, [System.IO.SeekOrigin]::Begin)
+            $pbuf = New-Object byte[] $psz
+            $null = $pfs.Read($pbuf, 0, $psz)
+        } finally {
+            $pfs.Close()
+        }
+        $text = [System.Text.Encoding]::ASCII.GetString($pbuf)
+        $idx = $text.IndexOf("FIRMWARE_VER:")
+        if ($idx -ge 0) { $text = $text.Substring($idx) }
+        $keep = New-Object System.Collections.Generic.List[string]
+        foreach ($line in ($text -split "`r?`n")) {
+            $t = $line.Trim()
+            if ($t -match '^(FIRMWARE_VER:|TYPE:|CMDLINE:|uuid:)') { [void]$keep.Add($t) }
+        }
+        if ($keep.Count -gt 0) {
+            [System.IO.File]::WriteAllText($SavedParameter, (($keep -join "`n") + "`n"), [System.Text.Encoding]::ASCII)
+            Write-Host ("已保存分区表: {0}" -f $SavedParameter)
+        }
+    }
+    return $true
+}
+
 function Find-LoaderFile {
     if ($Loader) {
         $resolved = Resolve-ExistingFile $Loader
         if (-not $resolved) { throw "找不到 Loader：$Loader" }
         return $resolved
     }
-    foreach ($dir in @($FirmwareDir, $Root)) {
-        $exact = Join-Path $dir "MiniLoaderAll.bin"
-        if (Test-Path -LiteralPath $exact) {
-            return (Resolve-Path -LiteralPath $exact).Path
+    if (Test-Path -LiteralPath $SavedLoader) {
+        return (Resolve-Path -LiteralPath $SavedLoader).Path
+    }
+    $fw = Find-DefaultImage "update"
+    if ($fw) {
+        Write-Host "未找到已保存的 MiniLoaderAll.bin，从 update.img 提取 ..."
+        if ((Save-LoaderFromUpdate $fw) -and (Test-Path -LiteralPath $SavedLoader)) {
+            return (Resolve-Path -LiteralPath $SavedLoader).Path
         }
     }
     $patterns = @("rk3588_spl_loader*.bin", "*spl_loader*.bin", "*MiniLoader*.bin", "*_loader_*.bin")
     foreach ($dir in @($FirmwareDir, $Root)) {
         foreach ($pat in $patterns) {
             $hit = Get-ChildItem -LiteralPath $dir -Filter $pat -File -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -ne "update.img" } |
                 Select-Object -First 1
             if ($hit) { return $hit.FullName }
         }
@@ -500,21 +564,29 @@ function Ensure-LoaderMode {
     $loaderPath = Find-LoaderFile
     if (-not $loaderPath) {
         throw @"
-设备当前是 Maskrom 模式。此操作需要先 Download Boot。
-请把 MiniLoaderAll.bin（或 rk3588_spl_loader_*.bin）放到 firmware\，或用 -Loader 指定。
-整包烧写 / 整片擦除不需要单独先 DB。
+设备当前是 Maskrom 模式。进 Maskrom 时已擦除 eMMC 引导区，单分区烧写必须先把 Loader 写入存储 (UL)。
+请把 MiniLoaderAll.bin 放到 firmware\（可从 update.img 自动提取），或用 -Loader 指定。
+整包烧写 update.img 会自带 loader，不需要这一步。
 "@
     }
     Write-Host ""
-    Write-Host "设备处于 Maskrom，先 Download Boot ..."
+    Write-Host "设备处于 Maskrom，写入 Loader 到 eMMC (UL) ..."
     Write-Host "Loader: $loaderPath"
-    Invoke-UpgradeTool @("DB", $loaderPath) | Out-Null
-    Write-Host "等待设备枚举为 Loader ..."
-    $again = Wait-Device -TimeoutSec 25 -WantMode "Loader"
+    try {
+        Invoke-UpgradeTool @("UL", $loaderPath, "-noreset") | Out-Null
+    } catch {
+        throw "烧写 Loader 失败。请先复位板子再重试。错误：$($_.Exception.Message)"
+    }
+    Start-Sleep -Seconds 2
+    $again = Get-DeviceStatus
     if (-not $again.Found) {
-        throw "Download Boot 之后未再检测到设备，请检查 USB 连接后重试。"
+        throw "写入 Loader 之后未再检测到设备，请检查 USB 连接后重试。"
     }
     Write-Host $again.Output
+    if (Test-Path -LiteralPath $SavedParameter) {
+        Write-Host "写入分区表 (parameter.txt) ..."
+        Invoke-UpgradeTool @("DI", "-p", $SavedParameter) | Out-Null
+    }
     return $again
 }
 
@@ -667,6 +739,7 @@ function Invoke-Jobs {
                 $uf = @("UF", $job.File)
                 if ($NoReset) { $uf += "-noreset" }
                 Invoke-UpgradeTool $uf | Out-Null
+                [void](Save-LoaderFromUpdate $job.File)
             }
             "loader" {
                 $ul = @("UL", $job.File)
@@ -691,8 +764,7 @@ function Invoke-Jobs {
         Write-Host "  $($job.Name) 完成。" -ForegroundColor Green
     }
 
-    $didFirmwareOrLoader = @($Jobs | Where-Object { $_.Kind -in @("firmware", "loader") }).Count -gt 0
-    if (-not $NoReset -and -not $didFirmwareOrLoader) {
+    if (-not $NoReset) {
         Write-Host ""
         Write-Host "复位设备 (RD) ..."
         Invoke-UpgradeTool @("RD") -AllowFail | Out-Null
