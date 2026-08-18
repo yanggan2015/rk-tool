@@ -7,3 +7,8 @@ firmware/parameter.txt
 /update.img
 *.log
 downloads/
+
+__pycache__/
+*.py[cod]
+*.class
+
