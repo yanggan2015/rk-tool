@@ -1,0 +1,1 @@
+{"board":"tl3588","command":"mmc dev 0;mmc erase 0 2048","timeout":1}
