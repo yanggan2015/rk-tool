@@ -1,1 +1,0 @@
-﻿将待烧写的 update.img 放到本目录，然后运行 scripts\flash-update.bat

@@ -1,4 +1,8 @@
-downloads/
+# 用户固件体积大，不入库
 firmware/*.img
 firmware/*.IMG
+firmware/*.bin
+firmware/*.BIN
+/update.img
 *.log
+downloads/
