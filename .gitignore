@@ -5,5 +5,9 @@ firmware/*.bin
 firmware/*.BIN
 firmware/parameter.txt
 /update.img
+/update*.img
+config.cfg
+__pycache__/
+*.pyc
 *.log
 downloads/
