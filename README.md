@@ -1,54 +1,33 @@
 # rk-tool
 
-Windows 下用命令行烧写瑞芯微固件，不依赖 RKDevTool 图形界面。
+Windows 命令行烧写瑞芯微固件（`upgrade_tool`），不依赖 RKDevTool GUI。
 
-支持：
+入口：
 
-- 整包烧写 `update.img`、单分区烧写
-- 设备擦除、读芯片/存储/分区信息
-- 多设备 `-s LocationID` 选择
+- `flash.bat` → 调用 `rk.py`
+- `rk.py`：烧写逻辑 + 按板型选 MiniLoader
 
-完整说明见 [说明书.md](说明书.md)。
-
-## 目录
-
-```text
-rk-tool/
-├── flash.bat                 推荐入口
-├── firmware/                 放置镜像（不入库）
-├── scripts/                  烧写脚本
-└── tools/                    官方 upgrade_tool 与 USB 驱动
-```
-
-## 快速开始
-
-1. 管理员运行 `tools\DriverAssistant\DriverInstall.exe` 安装驱动
-2. 将 `update.img`（以及可选的 `boot.img` / `uboot.img` / `rootfs.img`）放到 `firmware\`  
-   根目录已有 `update.img` 时也可直接烧，不必先搬文件
-3. 设备进入 **Loader** 或 **Maskrom** 后执行：
+## 用法
 
 ```bat
-flash.bat
+flash.bat boards
+flash.bat ld
+flash.bat db                 :: Maskrom 下按 PID 自动选 loader
+flash.bat db -b ok3568
+flash.bat ul -b ok3568
+flash.bat uf update.img
+flash.bat di boot boot.img -b ok3568
+flash.bat rd
 ```
 
-单分区：
+## Loader
 
-```bat
-flash.bat boot
-flash.bat uboot
-flash.bat rootfs
-flash.bat boot uboot rootfs
-```
+`firmware/<板型>/MiniLoaderAll.bin`，来自 `forlinx-prebuild` 对应分支。
 
-查看设备 / 是否 Maskrom：
+| 板型目录 | 芯片 | 默认 PID |
+|---------|------|---------|
+| ok3568 / rk3568 | RK3568 | 0x350a → ok3568 |
+| ok3562 | RK3562 | 0x350d |
+| tl3588 / ok3588 / opt3588 | RK3588 | 0x350b → tl3588 |
 
-```bat
-flash.bat status
-flash.bat maskrom
-flash.bat info
-flash.bat erase
-```
-
-多设备时先 `flash.bat ld` 看 LocationID，再 `flash.bat -s 244 update`。
-
-查看用法：`flash.bat help`
+Maskrom 下单分区烧写会先 `DB` 对应 loader。

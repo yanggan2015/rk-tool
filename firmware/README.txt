@@ -1,23 +1,19 @@
-把要烧写的镜像放到本目录（推荐）。
-脚本也会在工程根目录查找同名文件（例如根目录的 update.img）。
+按板型存放 MiniLoaderAll.bin（Maskrom DB / UL 用）。
 
-整包固件（推荐）：
-  update.img
+  firmware/ok3568/MiniLoaderAll.bin   RK3568 (PID 0x350a 默认)
+  firmware/rk3568/MiniLoaderAll.bin
+  firmware/ok3562/MiniLoaderAll.bin
+  firmware/ok3588/MiniLoaderAll.bin
+  firmware/tl3588/MiniLoaderAll.bin   RK3588 (PID 0x350b 默认)
+  firmware/opt3588/MiniLoaderAll.bin
 
-单分区镜像（按需放置，文件名需能识别分区）：
-  boot.img
-  uboot.img
-  rootfs.img
-  recovery.img
-  misc.img
-  oem.img
-  userdata.img
-  MiniLoaderAll.bin     从 update.img 抽出保存；单烧 boot/rootfs 等时使用
-                            烧整包 update.img 时用镜像内 loader，并刷新此文件
+来源: forlinx-prebuild 对应分支 Image/MiniLoaderAll.bin 或 Image/loader.bin
 
-用法：
-  .\flash.bat                 烧写 firmware\update.img
-  .\flash.bat boot            烧写 firmware\boot.img
-  .\flash.bat rootfs          烧写 firmware\rootfs.img
-  .\flash.bat uboot           烧写 firmware\uboot.img
-  .\flash.bat help            查看全部用法
+用法:
+  flash.bat boards
+  flash.bat ld
+  flash.bat db              自动按 PID 选板型
+  flash.bat db -b ok3568
+  flash.bat ul -b ok3568
+  flash.bat uf update.img
+  flash.bat di boot boot.img -b ok3568

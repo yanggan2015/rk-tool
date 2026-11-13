@@ -1,8 +1,8 @@
-# 用户固件体积大，不入库
+# 用户固件体积大，不入库（板型 loader 在 firmware/<board>/ 仍入库）
 firmware/*.img
 firmware/*.IMG
-firmware/*.bin
-firmware/*.BIN
+/firmware/*.bin
+/firmware/*.BIN
 firmware/parameter.txt
 /update.img
 /update*.img
@@ -11,3 +11,4 @@ __pycache__/
 *.pyc
 *.log
 downloads/
+.sign_work/
